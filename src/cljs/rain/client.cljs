@@ -2,7 +2,8 @@
   (:require
    [dommy.utils :as utils]
    [dommy.core :as dommy]
-   [cljs.core.async :as async :refer (<! >! timeout chan take! alts! map< buffer dropping-buffer)])
+   [cljs.core.async :as async :refer (<! >! timeout chan take! alts! map< filter<
+                                         buffer dropping-buffer)])
   (:use-macros
    [dommy.macros :only [node sel sel1]]
    [cljs.core.async.macros :only [go go-loop]]))
@@ -58,8 +59,7 @@
 (defn delay-put!
   "put val onto port after delaying by ms"
   [port val ms]
-  (go (<! (timeout ms))
-      (>! port val)))
+  (js/setTimeout (fn [] (go (>! port val))) ms))
 
 (defn make-drop [v]
   {:x (rand-int js/innerWidth)
@@ -94,6 +94,9 @@
       :y (+ y g)
       :g (+ g dg))))
 
+(defn on-screen? [{:keys [x y r] :as drop}]
+  (< (- y r) js/innerHeight))
+
 (defn init
   "The Canvases
 - the background, with blur applied
@@ -111,16 +114,17 @@ The channels
         glass (prepare-canvas (sel1 :#glass))
         reflection (prepare-reflection (sel1 :#reflection) (sel1 :#background))
         new-drops (map< make-drop (timer-chan #(* 100 (rand-int 10)) :drop))
-        animating-drops (chan (dropping-buffer 1000))]
+        drops (chan (dropping-buffer 1000))
+        animating-drops (filter< on-screen? drops)]
     (go (loop [drop (<! new-drops)]
           (draw-drop glass drop)
-          (delay-put! animating-drops drop (/ 1000 fps))
+          (delay-put! drops drop (/ 1000 fps))
           (recur (<! new-drops))))
     (go (loop [drop (<! animating-drops)]
           (let [next-drop (apply-gravity drop)]
             (clear-drop glass drop)
             (draw-drop glass next-drop)
-            (delay-put! animating-drops next-drop (/ 1000 fps)))
+            (delay-put! drops next-drop (/ 1000 fps)))
           (recur (<! animating-drops))))))
 
 (.addEventListener js/document "DOMContentLoaded" init)
