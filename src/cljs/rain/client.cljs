@@ -2,7 +2,7 @@
   (:require
    [dommy.utils :as utils]
    [dommy.core :as dommy]
-   [cljs.core.async :as async :refer (<! >! timeout chan take! alts! map<)])
+   [cljs.core.async :as async :refer (<! >! timeout chan take! alts! map< buffer dropping-buffer)])
   (:use-macros
    [dommy.macros :only [node sel sel1]]
    [cljs.core.async.macros :only [go go-loop]]))
@@ -11,7 +11,10 @@
 (def tau (* 2 pi))
 
 (def fps 25)
-(def k-gravity (/  (* 0.005 fps) 25))
+(def k-gravity (/ (* 0.005 fps) 25))
+
+(defn log [stuff]
+  (.log js/console stuff))
 
 (defn prepare-canvas [canvas]
   (let [width js/innerWidth
@@ -37,7 +40,6 @@
       (.drawImage bg-image (- (/ width 2)) (- (/ height 2)) width height))
     reflection))
 
-
 (defn timer-chan
   "create a channel which emits a message every (delay-fn) milliseconds
    if the optional stop parameter is provided, any value written
@@ -53,46 +55,72 @@
             (recur))))
        out)))
 
-(defn draw-drop
-"
-context.beginPath();
-      context.arc(centerX, centerY, radius, 0, 2 * Math.PI, false);
-      context.fillStyle = 'green';
-      context.fill();
-      context.lineWidth = 5;
-      context.strokeStyle = '#003300';
-      context.stroke();
-"
- [canvas {:keys [x y r] :as drop}]
- (doto (.getContext canvas "2d")
-   (.beginPath)
-   (.arc x y r 0 tau false)
-   (aset "fillStyle" "white")
-   (aset "lineWidth" 1)
-   (aset "strokeStyle" "#000000")
-   (.closePath)
-   (.fill)
-   (.stroke)))
+(defn delay-put!
+  "put val onto port after delaying by ms"
+  [port val ms]
+  (go (<! (timeout ms))
+      (>! port val)))
 
 (defn make-drop [v]
   {:x (rand-int js/innerWidth)
    :y (rand-int js/innerHeight)
-   :size (+ 2 (rand-int 6))})
+   :r (+ 2 (rand-int 6))})
+
+(defn draw-drop
+  [canvas {:keys [x y r] :as drop}]
+
+  (let [c (.getContext canvas "2d")]
+    (.beginPath c)
+    (.arc c x y r 0 tau false)
+    (aset c "fillStyle" "white")
+    (aset c "lineWidth" 1)
+    (aset c "strokeStyle" "#000000")
+    (.closePath c)
+    (.fill c)
+    (.stroke c)))
+
+(defn clear-drop
+  [canvas {:keys [x y r] :as drop}]
+  (.clearRect (.getContext canvas "2d")
+              (dec (- x r))
+              (dec (- y r))
+              (+ 2 (* 2 r))
+              (+ 2 (* 2 r))))
 
 (defn apply-gravity [{:keys [x y r] :as drop}]
-  (let [g (:gravity drop)]
-    {:x x
-     :y (+ y (or g k-gravity)) (* k-gravity)}))
+  (let [g (or (:g drop) k-gravity)
+        dg (* k-gravity r)]
+    (assoc drop
+      :y (+ y g)
+      :g (+ g dg))))
 
-(defn init []
+(defn init
+  "The Canvases
+- the background, with blur applied
+- the glass, canvas for drawing the raindrops
+- the reflection, canvas holding inverted image (unblurred) for drop reflection
+
+The channels
+- new drops, randomly placed by a random timer
+- drops that need to be (re-)rendered
+- filtered drops by whether they are still on screen
+- animation loop
+"
+  []
   (let [bg (prepare-bg (sel1 :#outside) (sel1 :#background) 15)
         glass (prepare-canvas (sel1 :#glass))
         reflection (prepare-reflection (sel1 :#reflection) (sel1 :#background))
-        timer (timer-chan #(* 100 (rand-int 10)) :hello)
-        drops (map< make-drop timer)]
-    (let []
-      (go (loop []
-            (draw-drop glass (<! drops))
-            (recur))))))
+        new-drops (map< make-drop (timer-chan #(* 100 (rand-int 10)) :drop))
+        animating-drops (chan (dropping-buffer 1000))]
+    (go (loop [drop (<! new-drops)]
+          (draw-drop glass drop)
+          (delay-put! animating-drops drop (/ 1000 fps))
+          (recur (<! new-drops))))
+    (go (loop [drop (<! animating-drops)]
+          (let [next-drop (apply-gravity drop)]
+            (clear-drop glass drop)
+            (draw-drop glass next-drop)
+            (delay-put! animating-drops next-drop (/ 1000 fps)))
+          (recur (<! animating-drops))))))
 
 (.addEventListener js/document "DOMContentLoaded" init)
