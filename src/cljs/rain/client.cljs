@@ -36,9 +36,11 @@
         width (.-width reflection)
         height (.-height reflection)]
     (doto (.getContext reflection "2d")
-      (.translate (/ width 2) (/ height 2))
-      (.rotate pi)
-      (.drawImage bg-image (- (/ width 2)) (- (/ height 2)) width height))
+      (.drawImage bg-image 0 0 width height)
+      (comment
+        (.translate (/ width 2) (/ height 2))
+        (.rotate pi)
+        (.drawImage bg-image (- (/ width 2)) (- (/ height 2)) width height)))
     reflection))
 
 (defn timer-chan
@@ -67,17 +69,18 @@
    :r (+ 2 (rand-int 6))})
 
 (defn draw-drop
-  [canvas {:keys [x y r] :as drop}]
+  [canvas {:keys [x y r] :as drop} reflection]
 
-  (let [c (.getContext canvas "2d")]
-    (.beginPath c)
-    (.arc c x y r 0 tau false)
-    (aset c "fillStyle" "white")
-    (aset c "lineWidth" 1)
-    (aset c "strokeStyle" "#000000")
-    (.closePath c)
-    (.fill c)
-    (.stroke c)))
+  (doto (.getContext canvas "2d")
+    (.save)
+    (.beginPath)
+    (.arc x y r 0 tau false)
+    (.closePath)
+    (.clip)
+    (.drawImage reflection
+                (- x (* r r)) (- y (* r r)) (* 4 r r) (* -4 r r)
+                (- x r) (- y r) (* 2 r) (* 2 r))
+    (.restore)))
 
 (defn clear-drop
   [canvas {:keys [x y r] :as drop}]
@@ -110,21 +113,23 @@ The channels
 - animation loop
 "
   []
-  (let [bg (prepare-bg (sel1 :#outside) (sel1 :#background) 15)
-        glass (prepare-canvas (sel1 :#glass))
-        reflection (prepare-reflection (sel1 :#reflection) (sel1 :#background))
-        new-drops (map< make-drop (timer-chan #(* 100 (rand-int 10)) :drop))
-        drops (chan (dropping-buffer 1000))
+  (let [bg              (prepare-bg (sel1 :#outside) (sel1 :#background) 15)
+        glass           (prepare-canvas (sel1 :#glass))
+        reflection      (prepare-reflection (sel1 :#reflection) (sel1 :#background))
+        new-drops       (map< make-drop (timer-chan #(* 50 (rand-int 10)) :drop))
+        drops           (chan (dropping-buffer 1000))
         animating-drops (filter< on-screen? drops)]
-    (go (loop [drop (<! new-drops)]
-          (draw-drop glass drop)
-          (delay-put! drops drop (/ 1000 fps))
-          (recur (<! new-drops))))
-    (go (loop [drop (<! animating-drops)]
-          (let [next-drop (apply-gravity drop)]
-            (clear-drop glass drop)
-            (draw-drop glass next-drop)
-            (delay-put! drops next-drop (/ 1000 fps)))
-          (recur (<! animating-drops))))))
+
+    (go-loop [drop (<! new-drops)]
+        (draw-drop glass drop reflection)
+        (delay-put! drops drop (/ 1000 fps))
+        (recur (<! new-drops)))
+
+    (go-loop [drop (<! animating-drops)]
+        (let [next-drop (apply-gravity drop)]
+          (clear-drop glass drop)
+          (draw-drop glass next-drop reflection)
+          (delay-put! drops next-drop (/ 1000 fps)))
+        (recur (<! animating-drops)))))
 
 (.addEventListener js/document "DOMContentLoaded" init)
