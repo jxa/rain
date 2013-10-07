@@ -3,7 +3,7 @@
    [dommy.utils :as utils]
    [dommy.core :as dommy]
    [cljs.core.async :as async :refer (<! >! timeout chan take! alts! map< filter<
-                                         buffer dropping-buffer)])
+                                         buffer dropping-buffer close!)])
   (:use-macros
    [dommy.macros :only [node sel sel1]]
    [cljs.core.async.macros :only [go go-loop]]))
@@ -51,11 +51,10 @@
      (timer-chan delay-fn msg (chan)))
   ([delay-fn msg stop]
      (let [out (chan)]
-       (go
-        (loop []
-          (when-not (= stop (second (alts! [stop (timeout (delay-fn))])))
-            (>! out msg)
-            (recur))))
+       (go-loop []
+           (when-not (= stop (second (alts! [stop (timeout (delay-fn))])))
+             (>! out msg)
+             (recur)))
        out)))
 
 (defn delay-put!
@@ -67,6 +66,35 @@
   {:x (rand-int js/innerWidth)
    :y (rand-int js/innerHeight)
    :r (+ 2 (rand-int 6))})
+
+(defn take-for
+  "returns a channel which is open until either chan is closed or time-in-ms elapses"
+  [in time-in-ms]
+  (let [t (timeout time-in-ms)
+        out (chan)]
+    (go-loop [[msg c] (alts! [in t])]
+      (if (= t c)
+        (close! out)
+        (do
+          (>! out msg)
+          (recur (alts! [in t])))))
+    out))
+
+(defn chunked
+  "returns an output channel which emits one vector of values
+for each unit of time"
+  [in time-in-ms]
+  (let [out (chan)]
+    (go-loop []
+             (>! out (<! (async/reduce conj [] (take-for in time-in-ms))))
+             (recur))
+    out))
+
+(defn merge-drops
+  "takes a vector of drops. returns a possibly smaller vector of drops that
+are merged if they overlap"
+  [drops]
+  drops)
 
 (defn draw-drop
   [canvas {:keys [x y r] :as drop} reflection]
@@ -118,18 +146,27 @@ The channels
         reflection      (prepare-reflection (sel1 :#reflection) (sel1 :#background))
         new-drops       (map< make-drop (timer-chan #(* 50 (rand-int 10)) :drop))
         drops           (chan (dropping-buffer 1000))
-        animating-drops (filter< on-screen? drops)]
+        animating-drops (filter< on-screen? drops)
+        animation-tick  (chunked animating-drops (/ 1000 fps))]
 
-    (go-loop [drop (<! new-drops)]
-        (draw-drop glass drop reflection)
-        (delay-put! drops drop (/ 1000 fps))
-        (recur (<! new-drops)))
+    (go-loop []
+             (>! drops (<! new-drops))
+             (recur))
 
-    (go-loop [drop (<! animating-drops)]
-        (let [next-drop (apply-gravity drop)]
-          (clear-drop glass drop)
-          (draw-drop glass next-drop reflection)
-          (delay-put! drops next-drop (/ 1000 fps)))
-        (recur (<! animating-drops)))))
+    (go-loop [drops-to-animate]
+             (doseq [drop (<! animation-tick)]
+               (let [next-drop (apply-gravity drop)]
+                 (clear-drop glass drop)
+                 (draw-drop glass next-drop reflection)
+                 (>! drops next-drop)))
+             (recur))))
+
+(defn test []
+  (let [t (timer-chan #(* 50 (rand-int 10)) :tessst)
+        c (chunked t 1500)]
+    (go-loop [msg (<! c)]
+             (when msg
+               (.log js/console msg)
+               (recur (<! c))))))
 
 (.addEventListener js/document "DOMContentLoaded" init)
