@@ -13,29 +13,18 @@
 (def fps 25)
 (def max-drops 1000)
 
-(defn prepare-canvas
-  "resize the canvas element to window height and width"
-  [canvas]
-  (let [width js/innerWidth
-        height js/innerHeight]
-    (aset canvas "width" width)
-    (aset canvas "height" height)
-    canvas))
-
-(defn prepare-bg [canvas bg-image blur]
-  (let [bg (prepare-canvas canvas)
-        width (.-width bg)
-        height (.-height bg)]
-    (.drawImage (.getContext bg "2d") bg-image 0 0 width height)
-    (js/stackBlurCanvasRGB "outside" 0 0 width height blur)
-    bg))
-
-(defn prepare-reflection [canvas bg-image]
-  (let [reflection (prepare-canvas canvas)
-        width (.-width reflection)
-        height (.-height reflection)]
-    (.drawImage (.getContext reflection "2d") bg-image 0 0 width height)
-    reflection))
+(defn draw-canvas
+  "Resize the canvas element to window height and width.
+   If optional bg is provided, draw it into the canvas"
+  ([canvas]
+     (draw-canvas canvas nil))
+  ([canvas bg]
+     (let [width js/innerWidth
+           height js/innerHeight]
+       (aset canvas "width" width)
+       (aset canvas "height" height)
+       (when bg (.drawImage (.getContext canvas "2d") bg 0 0 width height))
+       canvas)))
 
 (defn draw-drop
   "draw a circle on canvas with given reflection"
@@ -78,18 +67,23 @@ The channels
 - animation-tick: collects the next animation loop's worth of drops
 "
   []
-  (let [bg              (prepare-bg (sel1 :#outside) (sel1 :#background) 15)
-        glass           (prepare-canvas (sel1 :#glass))
-        reflection      (prepare-reflection (sel1 :#reflection) (sel1 :#background))
+  (let [bg              (draw-canvas (sel1 :#outside) (sel1 :#background))
+        glass           (draw-canvas (sel1 :#glass))
+        reflection      (draw-canvas (sel1 :#reflection) (sel1 :#background))
         new-drops       (map< make-drop (timer-chan #(* 20 (rand-int 10)) :drop))
         drops           (chan (dropping-buffer max-drops))
         animating-drops (filter< on-screen? drops)
         animation-tick  (chunked animating-drops (/ 1000 fps))]
 
+    ;; blur the background canvas
+    (js/stackBlurCanvasRGB "outside" 0 0 js/innerWidth js/innerHeight 15)
+
+    ;; generate new raindrops
     (go-loop []
              (>! drops (<! new-drops))
              (recur))
 
+    ;; raindrop render loop
     (go-loop [drops-to-animate (<! animation-tick)]
              (doseq [drop drops-to-animate]
                (clear-drop glass drop))
