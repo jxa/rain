@@ -17,7 +17,9 @@
 (defn log [stuff]
   (.log js/console stuff))
 
-(defn prepare-canvas [canvas]
+(defn prepare-canvas
+  "resize the canvas element to window height and width"
+  [canvas]
   (let [width js/innerWidth
         height js/innerHeight]
     (aset canvas "width" width)
@@ -25,22 +27,18 @@
     canvas))
 
 (defn prepare-bg [canvas bg-image blur]
-  (let [bg (prepare-canvas canvas)]
-    (.drawImage (.getContext bg "2d")
-                bg-image 0 0 (.-width bg) (.-height bg))
-    (js/stackBlurCanvasRGB "outside" 0 0 (.-width bg) (.-height bg) blur)
+  (let [bg (prepare-canvas canvas)
+        width (.-width reflection)
+        height (.-height reflection)]
+    (.drawImage (.getContext bg "2d") bg-image 0 0 width height)
+    (js/stackBlurCanvasRGB "outside" 0 0 width height blur)
     bg))
 
 (defn prepare-reflection [canvas bg-image]
   (let [reflection (prepare-canvas canvas)
         width (.-width reflection)
         height (.-height reflection)]
-    (doto (.getContext reflection "2d")
-      (.drawImage bg-image 0 0 width height)
-      (comment
-        (.translate (/ width 2) (/ height 2))
-        (.rotate pi)
-        (.drawImage bg-image (- (/ width 2)) (- (/ height 2)) width height)))
+    (.drawImage (.getContext reflection "2d") bg-image 0 0 width height)
     reflection))
 
 (defn timer-chan
@@ -62,7 +60,9 @@
   [port val ms]
   (js/setTimeout (fn [] (go (>! port val))) ms))
 
-(defn make-drop [v]
+(defn make-drop
+  "return a new raindrop instance"
+  [v]
   {:x (rand-int js/innerWidth)
    :y (rand-int js/innerHeight)
    :r (+ 2 (rand-int 6))})
@@ -97,8 +97,8 @@ are merged if they overlap"
   drops)
 
 (defn draw-drop
+  "draw a circle on canvas with given reflection"
   [canvas {:keys [x y r] :as drop} reflection]
-
   (doto (.getContext canvas "2d")
     (.save)
     (.beginPath)
@@ -111,6 +111,7 @@ are merged if they overlap"
     (.restore)))
 
 (defn clear-drop
+  "erase previously drawn raindrop"
   [canvas {:keys [x y r] :as drop}]
   (.clearRect (.getContext canvas "2d")
               (dec (- x r))
@@ -118,23 +119,32 @@ are merged if they overlap"
               (+ 2 (* 2 r))
               (+ 2 (* 2 r))))
 
-(defn apply-gravity [{:keys [x y r] :as drop}]
+(defn apply-gravity
+  "calculate new position and acceleration of raindrop"
+  [{:keys [x y r] :as drop}]
   (let [g (or (:g drop) k-gravity)
         dg (* k-gravity r)]
     (assoc drop
       :y (+ y g)
       :g (+ g dg))))
 
-(defn on-screen? [{:keys [x y r] :as drop}]
+(defn on-screen?
+  "returns true if raindrop is partially within bounds of window"
+  [{:keys [x y r] :as drop}]
   (< (- y r) js/innerHeight))
 
 (defn area [r]
+  "area of a circle of radius r"
   (* pi r r))
 
-(defn radius [area]
+(defn radius
+  "given the area of a circle, calculate the radius"
+  [area]
   (.sqrt js/Math (/ area pi)))
 
-(defn merge-drops [d1 d2]
+(defn merge-drops
+  "return a new raindrop which has the average position of the 2 parents and the combined size"
+  [d1 d2]
   {:x (/ (+ (:x d1) (:x d2)) 2)
    :y (/ (+ (:y d1) (:y d2)) 2)
    :r (radius (+ (area (:r d1)) (area (:r d2))))
