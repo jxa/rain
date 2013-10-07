@@ -128,6 +128,43 @@ are merged if they overlap"
 (defn on-screen? [{:keys [x y r] :as drop}]
   (< (- y r) js/innerHeight))
 
+(defn area [r]
+  (* pi r r))
+
+(defn radius [area]
+  (.sqrt js/Math (/ area pi)))
+
+(defn merge-drops [d1 d2]
+  {:x (/ (+ (:x d1) (:x d2)) 2)
+   :y (/ (+ (:y d1) (:y d2)) 2)
+   :r (radius (+ (area (:r d1)) (area (:r d2))))
+   :g (/ (+ (or (:g d1) 0)
+            (or (:g d2) 0))
+         2)})
+
+(defn square [x]
+  (* x x))
+
+(defn overlapping?
+  "Checks for whether 2 drops overlap.
+Stolen from http://stackoverflow.com/questions/8367512/algorithm-to-detect-if-a-circles-intersect-with-any-other-circle-in-the-same-pla"
+  [{x1 :x y1 :y r1 :r} {x2 :x y2 :y r2 :r}]
+
+  (<= (square (- r1 r2))
+      (+ (square (- x1 x2)) (square (- y1 y2)))
+      (square (+ r1 r2))))
+
+(defn merge-overlapping
+  "Assumes there is at most one drop from drops, which overlaps drop.
+Returns a new collection with overlapping values merged"
+  [drops drop]
+  (loop [d (first drops) ds (next drops) res []]
+    (if d
+      (if (overlapping? drop d)
+        (concat (conj res (merge-drops drop d)) ds)
+        (recur (first ds) (next ds) (conj res d)))
+      (conj res drop))))
+
 (defn init
   "The Canvases
 - the background, with blur applied
@@ -135,16 +172,16 @@ are merged if they overlap"
 - the reflection, canvas holding inverted image (unblurred) for drop reflection
 
 The channels
-- new drops, randomly placed by a random timer
-- drops that need to be (re-)rendered
-- filtered drops by whether they are still on screen
-- animation loop
+- new-drops: randomly placed by a random timer
+- drops: need to be (re-)rendered
+- animating-drops: filtered by whether they are still on screen
+- animation-tick: collects the next animation loop's worth of drops
 "
   []
   (let [bg              (prepare-bg (sel1 :#outside) (sel1 :#background) 15)
         glass           (prepare-canvas (sel1 :#glass))
         reflection      (prepare-reflection (sel1 :#reflection) (sel1 :#background))
-        new-drops       (map< make-drop (timer-chan #(* 50 (rand-int 10)) :drop))
+        new-drops       (map< make-drop (timer-chan #(* 20 (rand-int 10)) :drop))
         drops           (chan (dropping-buffer 1000))
         animating-drops (filter< on-screen? drops)
         animation-tick  (chunked animating-drops (/ 1000 fps))]
@@ -153,20 +190,26 @@ The channels
              (>! drops (<! new-drops))
              (recur))
 
-    (go-loop [drops-to-animate]
-             (doseq [drop (<! animation-tick)]
+    (go-loop [drops-to-animate (<! animation-tick)]
+             (doseq [drop drops-to-animate]
+               (clear-drop glass drop))
+             (doseq [drop (reduce merge-overlapping [] drops-to-animate)]
                (let [next-drop (apply-gravity drop)]
-                 (clear-drop glass drop)
                  (draw-drop glass next-drop reflection)
                  (>! drops next-drop)))
-             (recur))))
+             (recur (<! animation-tick)))))
 
 (defn test []
-  (let [t (timer-chan #(* 50 (rand-int 10)) :tessst)
-        c (chunked t 1500)]
-    (go-loop [msg (<! c)]
-             (when msg
-               (.log js/console msg)
-               (recur (<! c))))))
+  (let [d1 {:x 10 :y 10 :r 5}
+        d2 {:x 10 :y 10 :r 5}
+        drops [{:x 10 :y 10 :r 5}
+               {:x 100 :y 10 :r 5}
+               {:x 1000 :y 10 :r 5}
+               {:x 10000 :y 10 :r 5}
+               {:x 100000 :y 10 :r 5}]
+        drop {:x 11 :y 10 :r 4}]
+    (doall (map log (map (partial overlapping? drop) drops)))
+    (doall (map log (map :x (merge-overlapping drops drop))))
+    ))
 
 (.addEventListener js/document "DOMContentLoaded" init)
