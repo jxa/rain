@@ -6,7 +6,6 @@
   (:gen-class))
 
 (defn handler [request]
-  (println request)
   (if (not= "/index.html" (:uri request))
     (response/redirect "/index.html")))
 
