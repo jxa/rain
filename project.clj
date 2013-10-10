@@ -5,7 +5,7 @@
                  [org.clojure/clojurescript "0.0-1909"]
                  [ring "1.2.0"]
                  [prismatic/dommy "0.1.1"]
-                 [core.async "0.1.0-SNAPSHOT"]]
+                 [org.clojure/core.async "0.1.242.0-44b1e3-alpha"]]
   :plugins [[lein-cljsbuild "0.3.3"]
             [lein-ring "0.8.7"]]
   :hooks [leiningen.cljsbuild]
