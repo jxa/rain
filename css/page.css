@@ -1,0 +1,38 @@
+html{min-height:100%;position:relative}/* make sure it is at least as tall as the viewport */
+body{
+  height:100%;
+  overflow: hidden;
+}
+
+img {display: none;}
+
+#content {
+  position:absolute;
+  top:0;
+  bottom:0;
+  left:0;
+  right:0;
+}
+
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+canvas#outside {
+  z-index: 1;
+}
+
+canvas#glass {
+  z-index: 2;
+  opacity: 1;
+}
+
+canvas#reflection {
+  z-index: -1;
+  opacity: 1;
+  display: none;
+}
