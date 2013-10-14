@@ -54,7 +54,7 @@
   [{:keys [x y r] :as drop}]
   (< (- y r) js/innerHeight))
 
-(defn init
+(defn ^:export init
   "The Canvases
 - the background, with blur applied
 - the glass, canvas for drawing the raindrops
@@ -92,5 +92,3 @@ The channels
                  (draw-drop glass next-drop reflection)
                  (>! drops next-drop)))
              (recur (<! animation-tick)))))
-
-(.addEventListener js/document "DOMContentLoaded" init)

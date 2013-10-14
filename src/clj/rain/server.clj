@@ -5,9 +5,10 @@
             [ring.util.response :as response])
   (:gen-class))
 
-(defn handler [request]
-  (if (not= "/index.html" (:uri request))
-    (response/redirect "/index.html")))
+(defn handler [uri]
+  (if (or (not= "/dev.html" uri)
+          (not= "/index.html" uri))
+    (response/redirect "/dev.html")))
 
 (def app
   (-> handler

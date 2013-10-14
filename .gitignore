@@ -2,3 +2,5 @@ target/*
 checkouts
 resources/public/js/cljs.js
 .lein-repl-history
+/resources/public/js/cljs.dev.js
+/resources/public/js/cljs.js.map

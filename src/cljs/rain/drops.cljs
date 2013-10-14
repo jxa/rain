@@ -1,5 +1,5 @@
 (ns rain.drops
-  (:require [rain.util :refer (pu tau log radius area square)]))
+  (:require [rain.util :refer (pi tau log radius area square)]))
 
 (def k-gravity 0.005)
 
