@@ -47,18 +47,12 @@ for each unit of time"
 I was able to create a channel abstraction, `chunked` which emits a vector of drops every tick on the render clock (25 frames per second, currently). With drops vector in hand it's straightforward to merge overlapping drops.
 
 ```
-  (let [bg              (draw-canvas (sel1 :#outside) (sel1 :#background))
-        glass           (draw-canvas (sel1 :#glass))
-        reflection      (draw-canvas (sel1 :#reflection) (sel1 :#background))
-        new-drops       (map< make-drop (timer-chan #(* 20 (rand-int 10)) :drop))
+  (let [...
         drops           (chan (dropping-buffer max-drops))
         animating-drops (filter< on-screen? drops)
         animation-tick  (chunked animating-drops (/ 1000 fps))]
 
-    ;; generate new raindrops
-    (go-loop []
-             (>! drops (<! new-drops))
-             (recur))
+	...
 
     ;; raindrop render loop
     (go-loop [drops-to-animate (<! animation-tick)]
@@ -73,7 +67,9 @@ I was able to create a channel abstraction, `chunked` which emits a vector of dr
              (recur (<! animation-tick))))
 ```
 
-Pretty damn concise. I can't wait to find the next application of core.async.
+Pretty damn concise. Merging drops just becomes a reduction over `drops-to-animate`.
+
+ I can't wait to find the next application of core.async.
 
 ## Running it locally
 
