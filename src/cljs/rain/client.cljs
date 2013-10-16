@@ -36,7 +36,7 @@
     (.closePath)
     (.clip)
     (.drawImage reflection
-                (- x (* r r)) (- y (* r r)) (* 4 r r) (* -4 r r)
+                (max 0 (- x (* r r))) (max 0 (- y (* r r))) (* 4 r r) (* 4 r r)
                 (- x r) (- y r) (* 2 r) (* 2 r))
     (.restore)))
 
