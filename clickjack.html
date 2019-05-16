@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clickjack test page</title>
+
+<p>Website is vulnerable to clickjacking!</p>
+
+<style>
+html, body {
+margin: 0;
+padding: 0;
+height: 100%;
+overflow: hidden;
+}
+iframe {
+display: block;
+width: calc(100% - 40px);
+height: calc(100% - 40px);
+margin: 20px;
+}
+img {
+position: absolute;
+top: 0;
+right: 0;
+}
+</style>
+<script src="https://unpkg.com/@ungap/custom-elements-builtin"></script>
+<script type="module" src="https://unpkg.com/x-frame-bypass"></script>
+</head>
+<body>
+<iframe is="x-frame-bypass" src="https://vendor.partner-testing.joinroot.com/vendor"></iframe>
+</body>
+</html>
